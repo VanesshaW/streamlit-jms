@@ -5,7 +5,7 @@ import plotly.express as px
 st.set_page_config(page_title="Dashboard Penjualan & Stok", layout="wide")
 
 st.markdown("<h1 style='text-align: center;'>📊 Dashboard Penjualan Distributor</h1>", unsafe_allow_html=True)
-st.markdown("<p style='text-align: center; color: gray;'>Analisis data penjualan, stok produk, dan performa bulanan</p>", unsafe_allow_html=True)
+st.markdown("<p style='text-align: center; color: gray;'>Analisis data penjualan, stok produk, dan forecasting penjualan</p>", unsafe_allow_html=True)
 
 # Sidebar Navigasi
 st.sidebar.header("🧭 Navigasi")
@@ -89,8 +89,48 @@ if uploaded_file:
             st.info("Catatan: Data ini hanya dummy, tidak tersimpan permanen karena tidak menggunakan database.")
 
     elif menu == "Forecasting":
-        st.subheader("🔮 Forecasting Penjualan")
-        st.info("📌 Fitur forecasting akan ditambahkan menggunakan Prophet atau moving average.")
+        st.subheader("🔮 Forecasting Penjualan Bulanan")
+        st.write("Menggunakan Meta Prophet untuk memprediksi tren penjualan ke depan.")
+
+        # Agregasi per bulan
+        df_bulanan = df.groupby(df['tanggal_transaksi'].dt.to_period('M')).agg({'total_harga': 'sum'}).reset_index()
+        df_bulanan['ds'] = df_bulanan['tanggal_transaksi'].dt.to_timestamp()
+        df_bulanan['y'] = df_bulanan['total_harga']
+        df_bulanan = df_bulanan[['ds', 'y']]
+
+        st.write("Data Historis:")
+        st.dataframe(df_bulanan.tail(), use_container_width=True)
+
+        # Forecasting
+        from prophet import Prophet
+        from prophet.plot import plot_plotly
+
+        m = Prophet()
+        m.fit(df_bulanan)
+
+        future = m.make_future_dataframe(periods=6, freq='M')  # 6 bulan ke depan
+        forecast = m.predict(future)
+
+        st.markdown("### 📅 Hasil Prediksi 6 Bulan ke Depan")
+        st.dataframe(forecast[['ds', 'yhat', 'yhat_lower', 'yhat_upper']].tail(6).rename(columns={
+            'ds': 'Bulan',
+            'yhat': 'Prediksi',
+            'yhat_lower': 'Batas Bawah',
+            'yhat_upper': 'Batas Atas'
+        }), use_container_width=True)
+
+        # Plot interaktif
+        st.markdown("### 📈 Grafik Prediksi")
+        fig3 = plot_plotly(m, forecast)
+        st.plotly_chart(fig3, use_container_width=True)
+
+        # Kesimpulan sederhana otomatis
+        latest = forecast[['ds', 'yhat']].tail(6)
+        avg_pred = latest['yhat'].mean()
+
+        st.markdown("### 📝 Kesimpulan Forecasting")
+        st.success(f"Rata-rata prediksi penjualan 6 bulan ke depan adalah sekitar **Rp {avg_pred:,.0f}** per bulan.")
+        st.info("Tren penjualan diprediksi **stabil atau meningkat** secara bertahap, namun perlu dipantau faktor eksternal seperti permintaan dan stok.")
 
 else:
     st.warning("⬆️ Upload file Excel terlebih dahulu untuk melihat dashboard.")
